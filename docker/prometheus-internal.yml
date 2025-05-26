@@ -22,4 +22,4 @@ scrape_configs:
          # metrics_path defaults to '/metrics'
          # scheme defaults to 'http'.
     static_configs:
-      - targets: ['ks_bridge:2114']
+      - targets: ['host.docker.internal:2114']
