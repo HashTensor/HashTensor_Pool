@@ -70,6 +70,7 @@ func (c *clientListener) OnConnect(ctx *gostratum.StratumContext) {
 		// hacky, but give time for the authorize to go through so we can use the worker name
 		time.Sleep(5 * time.Second)
 		c.shareHandler.getCreateStats(ctx) // create the stats if they don't exist
+		RecordMinerConnect(ctx)
 	}()
 }
 
@@ -81,6 +82,7 @@ func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 	c.logger.Info("removed client ", ctx.Id)
 	c.clientLock.Unlock()
 	RecordDisconnect(ctx)
+	RecordMinerDisconnect(ctx)
 }
 
 func (c *clientListener) NewBlockAvailable(kapi *KaspaApi) {

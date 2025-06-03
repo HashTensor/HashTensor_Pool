@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/kaspanet/kaspad/app/appmessage"
 	"github.com/onemorebsmith/kaspastratum/src/gostratum"
@@ -76,6 +77,11 @@ var networkBlockCount = promauto.NewGauge(prometheus.GaugeOpts{
 	Name: "ks_network_block_count",
 	Help: "Gauge representing the network block count",
 })
+
+var minerUptimeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "ks_miner_uptime_seconds",
+	Help: "Gauge representing when miners connected (unix timestamp)",
+}, workerLabels)
 
 func commonLabels(worker *gostratum.StratumContext) prometheus.Labels {
 	return prometheus.Labels{
@@ -180,6 +186,14 @@ func RecordBalances(response *appmessage.GetBalancesByAddressesResponseMessage) 
 			unique[v.Address] = struct{}{}
 		}
 	}
+}
+
+func RecordMinerConnect(worker *gostratum.StratumContext) {
+	minerUptimeGauge.With(commonLabels(worker)).Set(float64(time.Now().Unix()))
+}
+
+func RecordMinerDisconnect(worker *gostratum.StratumContext) {
+	minerUptimeGauge.Delete(commonLabels(worker))
 }
 
 var promInit sync.Once
