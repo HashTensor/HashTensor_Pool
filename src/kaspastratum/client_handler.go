@@ -23,6 +23,7 @@ type clientListener struct {
 	shareHandler     *shareHandler
 	clientLock       sync.RWMutex
 	clients          map[int32]*gostratum.StratumContext
+	activeWorkers    map[string]int32 // maps "wallet.worker" to client ID
 	lastBalanceCheck time.Time
 	clientCounter    int32
 	minShareDiff     float64
@@ -41,7 +42,29 @@ func newClientListener(logger *zap.SugaredLogger, shareHandler *shareHandler, mi
 		clientLock:     sync.RWMutex{},
 		shareHandler:   shareHandler,
 		clients:        make(map[int32]*gostratum.StratumContext),
+		activeWorkers:  make(map[string]int32),
 	}
+}
+
+func (c *clientListener) IsWorkerActive(wallet, worker string) bool {
+	c.clientLock.Lock()
+	defer c.clientLock.Unlock()
+	
+	workerKey := fmt.Sprintf("%s.%s", wallet, worker)
+	_, exists := c.activeWorkers[workerKey]
+	return exists
+}
+
+func (c *clientListener) RegisterWorker(wallet, worker string, clientId int32) bool {
+	c.clientLock.Lock()
+	defer c.clientLock.Unlock()
+	
+	workerKey := fmt.Sprintf("%s.%s", wallet, worker)
+	if _, exists := c.activeWorkers[workerKey]; exists {
+		return false
+	}
+	c.activeWorkers[workerKey] = clientId
+	return true
 }
 
 func (c *clientListener) OnConnect(ctx *gostratum.StratumContext) {
@@ -66,6 +89,10 @@ func (c *clientListener) OnConnect(ctx *gostratum.StratumContext) {
 	if c.extranonceSize > 0 {
 		ctx.Extranonce = fmt.Sprintf("%0*x", c.extranonceSize*2, extranonce)
 	}
+
+	// Create a new MiningState for this client
+	ctx.State = MiningStateGenerator()
+
 	go func() {
 		// hacky, but give time for the authorize to go through so we can use the worker name
 		time.Sleep(5 * time.Second)
@@ -79,6 +106,11 @@ func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 	c.clientLock.Lock()
 	c.logger.Info("removing client ", ctx.Id)
 	delete(c.clients, ctx.Id)
+	// Remove from active workers map
+	if ctx.WalletAddr != "" && ctx.WorkerName != "" {
+		workerKey := fmt.Sprintf("%s.%s", ctx.WalletAddr, ctx.WorkerName)
+		delete(c.activeWorkers, workerKey)
+	}
 	c.logger.Info("removed client ", ctx.Id)
 	c.clientLock.Unlock()
 	RecordDisconnect(ctx)

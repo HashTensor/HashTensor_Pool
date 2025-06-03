@@ -73,6 +73,38 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 		return fmt.Errorf("invalid wallet format %s: %w", address, err)
 	}
 
+	// Get the clientListener from the parent context
+	clientListener, ok := ctx.Value("clientListener").(interface{ 
+		IsWorkerActive(wallet, worker string) bool
+		RegisterWorker(wallet, worker string, clientId int32) bool
+	})
+	if !ok {
+		ctx.Logger.Error("invalid clientListener type, cannot check worker status")
+		return fmt.Errorf("invalid clientListener type")
+	}
+
+	// Check if this wallet.worker combination is already in use
+	if clientListener.IsWorkerActive(address, workerName) {
+		ctx.Logger.Warn(fmt.Sprintf("duplicate worker connection attempt - wallet: %s, worker: %s, from IP: %s:%d", 
+			address, workerName, ctx.RemoteAddr, ctx.RemotePort))
+		return ctx.Reply(JsonRpcResponse{
+			Id:     event.Id,
+			Result: false,
+			Error:  []any{23, fmt.Sprintf("Worker '%s' already connected. Please use a different worker name.", workerName), nil},
+		})
+	}
+
+	// Try to register the worker
+	if !clientListener.RegisterWorker(address, workerName, ctx.Id) {
+		ctx.Logger.Warn(fmt.Sprintf("failed to register worker - wallet: %s, worker: %s, from IP: %s:%d", 
+			address, workerName, ctx.RemoteAddr, ctx.RemotePort))
+		return ctx.Reply(JsonRpcResponse{
+			Id:     event.Id,
+			Result: false,
+			Error:  []any{23, fmt.Sprintf("Worker '%s' already connected. Please use a different worker name.", workerName), nil},
+		})
+	}
+
 	ctx.WalletAddr = address
 	ctx.WorkerName = workerName
 	ctx.Logger = ctx.Logger.With(zap.String("worker", ctx.WorkerName), zap.String("addr", ctx.WalletAddr))
@@ -84,7 +116,8 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 		SendExtranonce(ctx)
 	}
 
-	ctx.Logger.Info(fmt.Sprintf("client authorized, address: %s", ctx.WalletAddr))
+	ctx.Logger.Info(fmt.Sprintf("client authorized, address: %s, worker: %s, from IP: %s:%d", 
+		ctx.WalletAddr, ctx.WorkerName, ctx.RemoteAddr, ctx.RemotePort))
 	return nil
 }
 

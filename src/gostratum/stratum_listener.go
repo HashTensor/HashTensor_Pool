@@ -94,7 +94,7 @@ func (s *StratumListener) newClient(ctx context.Context, connection net.Conn) {
 		addr = parts[0] // trim off the port
 	}
 	clientContext := &StratumContext{
-		parentContext: ctx,
+		parentContext: context.WithValue(ctx, "clientListener", s.ClientListener),
 		RemoteAddr:    addr,
 		RemotePort:    port,
 		Logger:        s.Logger.With(zap.String("client", addr)),
@@ -110,7 +110,6 @@ func (s *StratumListener) newClient(ctx context.Context, connection net.Conn) {
 	}
 
 	go spawnClientListener(clientContext, connection, s)
-
 }
 
 func (s *StratumListener) HandleEvent(ctx *StratumContext, event JsonRpcEvent) error {
