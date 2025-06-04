@@ -2,11 +2,9 @@ package gostratum
 
 import (
 	"bufio"
-	"bytes"
 	"io"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -25,7 +23,7 @@ func spawnClientListener(ctx *StratumContext, connection net.Conn, s *StratumLis
 				return err
 			}
 			return s.HandleEvent(ctx, event)
-		})
+		}, ctx)
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			continue // expected timeout
 		}
@@ -44,7 +42,7 @@ func spawnClientListener(ctx *StratumContext, connection net.Conn, s *StratumLis
 
 type LineCallback func(line string) error
 
-func readFromConnection(connection net.Conn, cb LineCallback) error {
+func readFromConnection(connection net.Conn, cb LineCallback, ctx *StratumContext) error {
 	deadline := time.Now().Add(5 * time.Second).UTC()
 	if err := connection.SetReadDeadline(deadline); err != nil {
 		return err
