@@ -3,6 +3,7 @@ package gostratum
 import (
 	"bufio"
 	"bytes"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -49,17 +50,18 @@ func readFromConnection(connection net.Conn, cb LineCallback) error {
 		return err
 	}
 
-	buffer := make([]byte, 1024)
-	_, err := connection.Read(buffer)
-	if err != nil {
-		return errors.Wrapf(err, "error reading from connection")
-	}
-	buffer = bytes.ReplaceAll(buffer, []byte("\x00"), nil)
-	scanner := bufio.NewScanner(strings.NewReader(string(buffer)))
+	scanner := bufio.NewScanner(connection)
 	for scanner.Scan() {
 		if err := cb(scanner.Text()); err != nil {
 			return err
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		if err == io.EOF {
+			ctx.Logger.Info("client disconnected (EOF)")
+			return nil
+		}
+		return errors.Wrapf(err, "error reading from connection")
 	}
 	return nil
 }
