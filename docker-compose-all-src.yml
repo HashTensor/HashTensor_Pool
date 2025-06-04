@@ -15,7 +15,6 @@ services:
       - '-kaspa=127.0.0.1:16110'
       - '-pow2clamp=true'
       - '-extranonce=2'
-      - '-mindiff=4' # minimum share difficulty to accept from miner(s)
     ports:
       - 5555:5555
       - 2114:2114
