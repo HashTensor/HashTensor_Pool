@@ -44,3 +44,6 @@ services:
       - 9090:9090
     extra_hosts:
       - host.docker.internal:host-gateway
+    command:
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
