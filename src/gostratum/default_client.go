@@ -110,6 +110,7 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 				Error:  []any{23, fmt.Sprintf("Worker '%s' already connected. Please use a different worker name.", workerName), nil},
 			})
 		}
+	}
 
 	ctx.WalletAddr = address
 	ctx.WorkerName = workerName
