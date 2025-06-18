@@ -36,7 +36,7 @@ services:
       - '-pow2clamp=true'        # (optional, for ASICs)
       - '-extranonce=2'
       - '-stratum=:5556'         # <--- new port
-      - '-mindiff=50000'         # <--- set your desired minimum diff here
+      - '-mindiff=65536'     # <--- set your desired minimum diff here
       - '-prom=:2115'
     ports:
       - 5556:5556                # <--- expose the new port
