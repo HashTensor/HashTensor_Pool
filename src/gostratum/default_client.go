@@ -2,6 +2,7 @@ package gostratum
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -84,14 +85,17 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 	}
 
 	// Check if this wallet.worker combination is already in use
-	if clientListener.IsWorkerActive(address, workerName) {
-		ctx.Logger.Warn(fmt.Sprintf("duplicate worker connection attempt - wallet: %s, worker: %s, from IP: %s:%d", 
-			address, workerName, ctx.RemoteAddr, ctx.RemotePort))
-		return ctx.Reply(JsonRpcResponse{
-			Id:     event.Id,
-			Result: false,
-			Error:  []any{23, fmt.Sprintf("Worker '%s' already connected. Please use a different worker name.", workerName), nil},
-		})
+	disableDupCheck := os.Getenv("DISABLE_DUPLICATE_WORKER_CHECK")
+	if disableDupCheck != "1" && disableDupCheck != "true" {
+		if clientListener.IsWorkerActive(address, workerName) {
+			ctx.Logger.Warn(fmt.Sprintf("duplicate worker connection attempt - wallet: %s, worker: %s, from IP: %s:%d", 
+				address, workerName, ctx.RemoteAddr, ctx.RemotePort))
+			return ctx.Reply(JsonRpcResponse{
+				Id:     event.Id,
+				Result: false,
+				Error:  []any{23, fmt.Sprintf("Worker '%s' already connected. Please use a different worker name.", workerName), nil},
+			})
+		}
 	}
 
 	// Try to register the worker
