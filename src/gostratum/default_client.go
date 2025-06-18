@@ -99,7 +99,6 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 	}
 
 	// Try to register the worker
-	disableDupCheck := os.Getenv("DISABLE_DUPLICATE_WORKER_CHECK")
 	if disableDupCheck != "1" && disableDupCheck != "true" {
 		if !clientListener.RegisterWorker(address, workerName, ctx.Id) {
 			ctx.Logger.Warn(fmt.Sprintf("failed to register worker - wallet: %s, worker: %s, from IP: %s:%d", 
