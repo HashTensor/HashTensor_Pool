@@ -15,6 +15,7 @@ services:
       - '-kaspa=127.0.0.1:16110'
       - '-pow2clamp=true'
       - '-extranonce=2'
+      - '-prom=:2114'
     ports:
       - 5555:5555
       - 2114:2114
@@ -36,9 +37,10 @@ services:
       - '-extranonce=2'
       - '-stratum=:5556'         # <--- new port
       - '-mindiff=50000'         # <--- set your desired minimum diff here
+      - '-prom=:2115'
     ports:
       - 5556:5556                # <--- expose the new port
-      - 2115:2114                # (optional) if you want a separate prom port
+      - 2115:2115                # (optional) if you want a separate prom port
     extra_hosts:
       - host.docker.internal:host-gateway
   grafana:
