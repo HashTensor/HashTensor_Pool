@@ -29,3 +29,9 @@ scrape_configs:
          # scheme defaults to 'http'.
     static_configs:
       - targets: ['host.docker.internal:2115']
+  
+  - job_name: 'ks_bridge_ultrahigh'
+         # metrics_path defaults to '/metrics'
+         # scheme defaults to 'http'.
+    static_configs:
+      - targets: ['host.docker.internal:2116']
