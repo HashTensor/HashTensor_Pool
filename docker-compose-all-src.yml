@@ -20,6 +20,27 @@ services:
       - 2114:2114
     extra_hosts:
       - host.docker.internal:host-gateway
+  ks_bridge_highdiff:
+    build:
+      context: .
+      no_cache: true
+    container_name: ks_bridge_highdiff
+    restart: unless-stopped
+    user: "0"
+    network_mode: host
+    command:
+      - '-stats=true'
+      - '-vardiff=false'         # (optional) disable vardiff for fixed diff
+      - '-kaspa=127.0.0.1:16110'
+      - '-pow2clamp=true'        # (optional, for ASICs)
+      - '-extranonce=2'
+      - '-stratum=:5556'         # <--- new port
+      - '-mindiff=50000'         # <--- set your desired minimum diff here
+    ports:
+      - 5556:5556                # <--- expose the new port
+      - 2115:2114                # (optional) if you want a separate prom port
+    extra_hosts:
+      - host.docker.internal:host-gateway
   grafana:
     image: grafana/grafana-oss:latest
     container_name: ks_grafana
@@ -33,6 +54,9 @@ services:
       - 3000:3000
     extra_hosts:
       - host.docker.internal:host-gateway
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
   prometheus:
     image: prom/prometheus:latest
     container_name: ks_prom
