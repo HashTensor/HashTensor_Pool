@@ -31,12 +31,11 @@ services:
     network_mode: host
     command:
       - '-stats=true'
-      - '-vardiff=false'         # (optional) disable vardiff for fixed diff
       - '-kaspa=127.0.0.1:16110'
       - '-pow2clamp=true'        # (optional, for ASICs)
       - '-extranonce=2'
       - '-stratum=:5556'         # <--- new port
-      - '-mindiff=65536'     # <--- set your desired minimum diff here
+      - '-mindiff=1073741824'    # <--- set your desired minimum diff here (1G)
       - '-prom=:2115'
     ports:
       - 5556:5556                # <--- expose the new port
