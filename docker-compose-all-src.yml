@@ -32,11 +32,12 @@ services:
     command:
       - '-stats=true'
       - '-kaspa=127.0.0.1:16110'
-      - '-pow2clamp=true'        # (optional, for ASICs)
-      - '-extranonce=2'
+      - '-pow2clamp=true'        # (required for ASICs)
+      - '-extranonce=2'          # (required for IceRiver ASICs)
       - '-stratum=:5556'         # <--- new port
-      - '-mindiff=34359738368'    # 2^35, ≈34.3G
+      - '-mindiff=35184372088832' # 2^45, ≈35.2T (optimal for KS3L)
       - '-prom=:2115'
+      - '-vardiff=true'          # enable variable difficulty
     ports:
       - 5556:5556                # <--- expose the new port
       - 2115:2115                # (optional) if you want a separate prom port
