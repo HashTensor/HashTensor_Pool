@@ -35,7 +35,7 @@ services:
       - '-pow2clamp=true'        # (required for ASICs)
       - '-extranonce=2'          # (required for IceRiver ASICs)
       - '-stratum=:5556'         # <--- new port
-      - '-mindiff=35184372088832' # 2^45, ≈35.2T (optimal for KS3L)
+      - '-mindiff=16384' # 2^14, ≈16.4T
       - '-prom=:2115'
       - '-vardiff=true'          # enable variable difficulty
     ports:

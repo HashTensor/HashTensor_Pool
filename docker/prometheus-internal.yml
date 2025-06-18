@@ -23,3 +23,9 @@ scrape_configs:
          # scheme defaults to 'http'.
     static_configs:
       - targets: ['host.docker.internal:2114']
+  
+  - job_name: 'ks_bridge_highdiff'
+         # metrics_path defaults to '/metrics'
+         # scheme defaults to 'http'.
+    static_configs:
+      - targets: ['host.docker.internal:2115']
