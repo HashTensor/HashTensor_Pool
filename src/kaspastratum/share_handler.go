@@ -23,7 +23,13 @@ import (
 	"go.uber.org/zap"
 )
 
-const varDiffThreadSleep = 10
+const (
+	varDiffThreadSleep = 10
+	// Maximum allowed hashrate per worker in TH/s (1000 TH/s is a reasonable upper limit)
+	maxWorkerHashrateTHs = 1000.0
+	// Maximum blocks per hour per worker
+	maxBlocksPerHour = 10
+)
 
 type WorkStats struct {
 	BlocksFound        atomic.Int64
@@ -152,6 +158,28 @@ func (sh *shareHandler) checkStales(ctx *gostratum.StratumContext, si *submitInf
 	return nil
 }
 
+func (sh *shareHandler) checkHashrateSanity(stats *WorkStats, ctx *gostratum.StratumContext) error {
+	// Calculate current hashrate in TH/s
+	currentHashrate := GetAverageHashrateGHs(stats) / 1000.0 // Convert GH/s to TH/s
+	
+	if currentHashrate > maxWorkerHashrateTHs {
+		RecordHashrateViolation(ctx, "excessive_hashrate")
+		return fmt.Errorf("worker hashrate %.2f TH/s exceeds maximum allowed %.2f TH/s", currentHashrate, maxWorkerHashrateTHs)
+	}
+
+	// Check block finding rate
+	uptime := time.Since(stats.StartTime).Hours()
+	if uptime > 0 {
+		blocksPerHour := float64(stats.BlocksFound.Load()) / uptime
+		if blocksPerHour > maxBlocksPerHour {
+			RecordHashrateViolation(ctx, "excessive_blocks")
+			return fmt.Errorf("block finding rate %.2f/hour exceeds maximum allowed %d/hour", blocksPerHour, maxBlocksPerHour)
+		}
+	}
+
+	return nil
+}
+
 func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostratum.JsonRpcEvent) error {
 	state := GetMiningState(ctx)
 	maxJobs := uint64(state.maxJobs)
@@ -159,6 +187,17 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 	submitInfo, err := validateSubmit(ctx, state, event)
 	if err != nil {
 		return err
+	}
+
+	stats := sh.getCreateStats(ctx)
+	
+	// Add hashrate sanity check
+	if err := sh.checkHashrateSanity(stats, ctx); err != nil {
+		ctx.Logger.Error("Hashrate sanity check failed", zap.Error(err))
+		stats.InvalidShares.Add(1)
+		sh.overall.InvalidShares.Add(1)
+		RecordInvalidShare(ctx)
+		return ctx.ReplyBadShare(event.Id)
 	}
 
 	// add extranonce to noncestr if enabled and submitted nonce is shorter than
@@ -237,8 +276,6 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 		}
 	}
 
-	stats := sh.getCreateStats(ctx)
-
 	if invalidShare {
 		ctx.Logger.Warn("low diff share confirmed")
 		stats.InvalidShares.Add(1)
@@ -247,22 +284,6 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 		return ctx.ReplyLowDiffShare(event.Id)
 	}
 
-	// if err := sh.checkStales(ctx, submitInfo); err != nil {
-	// 	if err == ErrDupeShare {
-	// 		ctx.Logger.Info("dupe share "+submitInfo.noncestr, ctx.WorkerName, ctx.WalletAddr)
-	// 		atomic.AddInt64(&stats.StaleShares, 1)
-	// 		RecordDupeShare(ctx)
-	// 		return ctx.ReplyDupeShare(event.Id)
-	// 	} else if errors.Is(err, ErrStaleShare) {
-	// 		ctx.Logger.Info(err.Error(), ctx.WorkerName, ctx.WalletAddr)
-	// 		atomic.AddInt64(&stats.StaleShares, 1)
-	// 		RecordStaleShare(ctx)
-	// 		return ctx.ReplyStaleShare(event.Id)
-	// 	}
-	// 	// unknown error somehow
-	// 	ctx.Logger.Error("unknown error during check stales: ", err.Error())
-	// 	return ctx.ReplyBadShare(event.Id)
-	// }
 	stats.SharesFound.Add(1)
 	stats.VarDiffSharesFound.Add(1)
 	stats.SharesDiff.Add(state.stratumDiff.hashValue)

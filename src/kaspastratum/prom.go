@@ -33,6 +33,11 @@ var invalidCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help: "Number of stale shares found by worker over time",
 }, append(workerLabels, "type"))
 
+var hashrateViolationCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "ks_hashrate_violation_counter",
+	Help: "Number of shares rejected due to hashrate/block rate violations",
+}, append(workerLabels, "violation_type"))
+
 var blockCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "ks_blocks_mined",
 	Help: "Number of blocks mined over time",
@@ -194,6 +199,12 @@ func RecordMinerConnect(worker *gostratum.StratumContext) {
 
 func RecordMinerDisconnect(worker *gostratum.StratumContext) {
 	minerUptimeGauge.Delete(commonLabels(worker))
+}
+
+func RecordHashrateViolation(worker *gostratum.StratumContext, violationType string) {
+	labels := commonLabels(worker)
+	labels["violation_type"] = violationType
+	hashrateViolationCounter.With(labels).Inc()
 }
 
 var promInit sync.Once
