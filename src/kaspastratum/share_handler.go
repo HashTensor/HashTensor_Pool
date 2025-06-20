@@ -168,14 +168,14 @@ func (sh *shareHandler) checkHashrateSanity(stats *WorkStats, ctx *gostratum.Str
 	}
 
 	// Check block finding rate
-	uptime := time.Since(stats.StartTime).Hours()
-	if uptime > 0 {
-		blocksPerHour := float64(stats.BlocksFound.Load()) / uptime
-		if blocksPerHour > maxBlocksPerHour {
-			RecordHashrateViolation(ctx, "excessive_blocks")
-			return fmt.Errorf("block finding rate %.2f/hour exceeds maximum allowed %d/hour", blocksPerHour, maxBlocksPerHour)
-		}
-	}
+	// uptime := time.Since(stats.StartTime).Hours()
+	// if uptime > 0 {
+	// 	blocksPerHour := float64(stats.BlocksFound.Load()) / uptime
+	// 	if blocksPerHour > maxBlocksPerHour {
+	// 		RecordHashrateViolation(ctx, "excessive_blocks")
+	// 		return fmt.Errorf("block finding rate %.2f/hour exceeds maximum allowed %d/hour", blocksPerHour, maxBlocksPerHour)
+	// 	}
+	// }
 
 	return nil
 }
