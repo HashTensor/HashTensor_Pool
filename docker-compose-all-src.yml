@@ -16,8 +16,9 @@ services:
       - '-pow2clamp=true'
       - '-extranonce=2'
       - '-prom=:2114'
+      - '-stratum=:4444' 
     ports:
-      - 5555:5555
+      - 4444:4444  # In fact, port 5555 (reverse proxy) is used here, it is proxied through nginx.
       - 2114:2114
     extra_hosts:
       - host.docker.internal:host-gateway
@@ -33,8 +34,8 @@ services:
       - '-stats=true'
       - '-kaspa=127.0.0.1:16110'
       - '-pow2clamp=true'        # (required for ASICs)
-      - '-extranonce=2'          # (required for IceRiver ASICs)
-      - '-stratum=:5556'         # <--- new port
+      - '-extranonce=3'          # (required for IceRiver ASICs)
+      - '-stratum=:6666'         # <--- new port
       - '-mindiff=16384' # 2^14, ≈16.4T
       - '-prom=:2115'
       - '-vardiff=true'          # enable variable difficulty
@@ -43,32 +44,7 @@ services:
       - 2115:2115                # (optional) if you want a separate prom port
     extra_hosts:
       - host.docker.internal:host-gateway
-    environment:
-      - DISABLE_DUPLICATE_WORKER_CHECK=1
-  ks_bridge_ultrahigh:
-    build:
-      context: .
-      no_cache: true
-    container_name: ks_bridge_ultrahigh
-    restart: unless-stopped
-    user: "0"
-    network_mode: host
-    command:
-      - '-stats=true'
-      - '-kaspa=127.0.0.1:16110'
-      - '-pow2clamp=true'        # (required for ASICs)
-      - '-extranonce=3'          # (for ultra-high hashrate miners)
-      - '-stratum=:5557'         # <--- ultra-high diff port
-      - '-mindiff=1048576'       # 2^20, ≈1M 
-      - '-prom=:2116'
-      - '-vardiff=true'          # enable variable difficulty
-    ports:
-      - 5557:5557                # <--- expose the ultra-high port
-      - 2116:2116                # prometheus port for ultra-high bridge
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    environment:
-      - DISABLE_DUPLICATE_WORKER_CHECK=1
+
   grafana:
     image: grafana/grafana-oss:latest
     container_name: ks_grafana

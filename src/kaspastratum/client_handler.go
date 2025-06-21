@@ -62,7 +62,7 @@ func (c *clientListener) RegisterWorker(wallet, worker string, clientId int32) b
 	workerKey := fmt.Sprintf("%s.%s", wallet, worker)
 	if oldClientId, exists := c.activeWorkers[workerKey]; exists {
 		if oldClient, clientExists := c.clients[oldClientId]; clientExists {
-			c.logger.Info("disconnecting old client for worker", zap.String("worker", workerKey), zap.Int32("old_client_id", oldClientId), zap.Int32("new_client_id", clientId))
+			c.logger.Debug("disconnecting old client for worker", zap.String("worker", workerKey), zap.Int32("old_client_id", oldClientId), zap.Int32("new_client_id", clientId))
 			go oldClient.Disconnect()
 		}
 	}
@@ -107,7 +107,6 @@ func (c *clientListener) OnConnect(ctx *gostratum.StratumContext) {
 func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 	ctx.Done()
 	c.clientLock.Lock()
-	c.logger.Info("removing client ", ctx.Id)
 	delete(c.clients, ctx.Id)
 	// Remove from active workers map
 	if ctx.WalletAddr != "" && ctx.WorkerName != "" {
@@ -116,7 +115,7 @@ func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 			delete(c.activeWorkers, workerKey)
 		}
 	}
-	c.logger.Info("removed client ", ctx.Id)
+	c.logger.Debug("removed client", zap.Int32("client_id", ctx.Id))
 	c.clientLock.Unlock()
 	RecordDisconnect(ctx)
 	RecordMinerDisconnect(ctx)
