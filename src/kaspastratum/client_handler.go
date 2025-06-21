@@ -58,10 +58,13 @@ func (c *clientListener) IsWorkerActive(wallet, worker string) bool {
 func (c *clientListener) RegisterWorker(wallet, worker string, clientId int32) bool {
 	c.clientLock.Lock()
 	defer c.clientLock.Unlock()
-	
+
 	workerKey := fmt.Sprintf("%s.%s", wallet, worker)
-	if _, exists := c.activeWorkers[workerKey]; exists {
-		return false
+	if oldClientId, exists := c.activeWorkers[workerKey]; exists {
+		if oldClient, clientExists := c.clients[oldClientId]; clientExists {
+			c.logger.Info("disconnecting old client for worker", zap.String("worker", workerKey), zap.Int32("old_client_id", oldClientId), zap.Int32("new_client_id", clientId))
+			go oldClient.Disconnect()
+		}
 	}
 	c.activeWorkers[workerKey] = clientId
 	return true
@@ -109,7 +112,9 @@ func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 	// Remove from active workers map
 	if ctx.WalletAddr != "" && ctx.WorkerName != "" {
 		workerKey := fmt.Sprintf("%s.%s", ctx.WalletAddr, ctx.WorkerName)
-		delete(c.activeWorkers, workerKey)
+		if id, ok := c.activeWorkers[workerKey]; ok && id == ctx.Id {
+			delete(c.activeWorkers, workerKey)
+		}
 	}
 	c.logger.Info("removed client ", ctx.Id)
 	c.clientLock.Unlock()
