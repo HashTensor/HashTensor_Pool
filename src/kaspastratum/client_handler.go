@@ -129,6 +129,11 @@ func (c *clientListener) NewBlockAvailable(kapi *KaspaApi) {
 			continue
 		}
 		go func(client *gostratum.StratumContext) {
+			// ensure the client is still active before trying to do anything
+			if client.WalletAddr != "" && client.WorkerName != "" && !c.IsWorkerActive(client.WalletAddr, client.WorkerName) {
+				return
+			}
+
 			state := GetMiningState(client)
 			if client.WalletAddr == "" {
 				if time.Since(state.connectTime) > time.Second*20 { // timeout passed
