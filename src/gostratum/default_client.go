@@ -75,7 +75,7 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 	}
 
 	// Get the clientListener from the parent context
-	clientListener, ok := ctx.Value("clientListener").(interface{ 
+	clientListener, ok := ctx.Value("clientListener").(interface{
 		IsWorkerActive(wallet, worker string) bool
 		RegisterWorker(wallet, worker string, clientId int32) bool
 	})
@@ -84,31 +84,10 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 		return fmt.Errorf("invalid clientListener type")
 	}
 
-	// Check if this wallet.worker combination is already in use
+	// Try to register the worker, this will disconnect an existing active worker.
 	disableDupCheck := os.Getenv("DISABLE_DUPLICATE_WORKER_CHECK")
 	if disableDupCheck != "1" && disableDupCheck != "true" {
-		if clientListener.IsWorkerActive(address, workerName) {
-			ctx.Logger.Warn(fmt.Sprintf("duplicate worker connection attempt - wallet: %s, worker: %s, from IP: %s:%d", 
-				address, workerName, ctx.RemoteAddr, ctx.RemotePort))
-			return ctx.Reply(JsonRpcResponse{
-				Id:     event.Id,
-				Result: false,
-				Error:  []any{23, fmt.Sprintf("Worker '%s' already connected. Please use a different worker name.", workerName), nil},
-			})
-		}
-	}
-
-	// Try to register the worker
-	if disableDupCheck != "1" && disableDupCheck != "true" {
-		if !clientListener.RegisterWorker(address, workerName, ctx.Id) {
-			ctx.Logger.Warn(fmt.Sprintf("failed to register worker - wallet: %s, worker: %s, from IP: %s:%d", 
-				address, workerName, ctx.RemoteAddr, ctx.RemotePort))
-			return ctx.Reply(JsonRpcResponse{
-				Id:     event.Id,
-				Result: false,
-				Error:  []any{23, fmt.Sprintf("Worker '%s' already connected. Please use a different worker name.", workerName), nil},
-			})
-		}
+		clientListener.RegisterWorker(address, workerName, ctx.Id)
 	}
 
 	ctx.WalletAddr = address

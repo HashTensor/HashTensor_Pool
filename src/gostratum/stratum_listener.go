@@ -103,7 +103,7 @@ func (s *StratumListener) newClient(ctx context.Context, connection net.Conn) {
 		onDisconnect:  s.disconnectChannel,
 	}
 
-	s.Logger.Info(fmt.Sprintf("new client connecting - %s", addr))
+	s.Logger.Debug(fmt.Sprintf("new client connecting - %s", addr))
 
 	if s.ClientListener != nil { // TODO: should this be before we spawn the handler?
 		s.ClientListener.OnConnect(clientContext)
@@ -147,7 +147,9 @@ func (s *StratumListener) tcpListener(ctx context.Context, server net.Listener) 
 				s.Logger.Error("stopping listening due to server shutdown")
 				return
 			}
-			s.Logger.Error("failed to accept incoming connection", zap.Error(err))
+			if !errors.Is(err, net.ErrClosed) {
+				s.Logger.Error("failed to accept incoming connection", zap.Error(err))
+			}
 			continue
 		}
 		s.newClient(ctx, connection)

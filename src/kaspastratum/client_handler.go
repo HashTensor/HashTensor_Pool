@@ -58,10 +58,13 @@ func (c *clientListener) IsWorkerActive(wallet, worker string) bool {
 func (c *clientListener) RegisterWorker(wallet, worker string, clientId int32) bool {
 	c.clientLock.Lock()
 	defer c.clientLock.Unlock()
-	
+
 	workerKey := fmt.Sprintf("%s.%s", wallet, worker)
-	if _, exists := c.activeWorkers[workerKey]; exists {
-		return false
+	if oldClientId, exists := c.activeWorkers[workerKey]; exists {
+		if oldClient, clientExists := c.clients[oldClientId]; clientExists {
+			c.logger.Debug("disconnecting old client for worker", zap.String("worker", workerKey), zap.Int32("old_client_id", oldClientId), zap.Int32("new_client_id", clientId))
+			go oldClient.Disconnect()
+		}
 	}
 	c.activeWorkers[workerKey] = clientId
 	return true
@@ -104,14 +107,15 @@ func (c *clientListener) OnConnect(ctx *gostratum.StratumContext) {
 func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 	ctx.Done()
 	c.clientLock.Lock()
-	c.logger.Info("removing client ", ctx.Id)
 	delete(c.clients, ctx.Id)
 	// Remove from active workers map
 	if ctx.WalletAddr != "" && ctx.WorkerName != "" {
 		workerKey := fmt.Sprintf("%s.%s", ctx.WalletAddr, ctx.WorkerName)
-		delete(c.activeWorkers, workerKey)
+		if id, ok := c.activeWorkers[workerKey]; ok && id == ctx.Id {
+			delete(c.activeWorkers, workerKey)
+		}
 	}
-	c.logger.Info("removed client ", ctx.Id)
+	c.logger.Debug("removed client", zap.Int32("client_id", ctx.Id))
 	c.clientLock.Unlock()
 	RecordDisconnect(ctx)
 	RecordMinerDisconnect(ctx)
@@ -125,6 +129,11 @@ func (c *clientListener) NewBlockAvailable(kapi *KaspaApi) {
 			continue
 		}
 		go func(client *gostratum.StratumContext) {
+			// ensure the client is still active before trying to do anything
+			if client.WalletAddr != "" && client.WorkerName != "" && !c.IsWorkerActive(client.WalletAddr, client.WorkerName) {
+				return
+			}
+
 			state := GetMiningState(client)
 			if client.WalletAddr == "" {
 				if time.Since(state.connectTime) > time.Second*20 { // timeout passed
