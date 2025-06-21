@@ -26,7 +26,7 @@ import (
 const (
 	varDiffThreadSleep = 10
 	// Maximum allowed hashrate per worker in TH/s (1000 TH/s is a reasonable upper limit)
-	maxWorkerHashrateTHs = 1000.0
+	maxWorkerHashrateTHs = 2000.0
 	// Maximum blocks per hour per worker
 	maxBlocksPerHour = 10
 )
