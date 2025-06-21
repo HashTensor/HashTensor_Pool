@@ -40,7 +40,7 @@ services:
       - '-prom=:2115'
       - '-vardiff=true'          # enable variable difficulty
     ports:
-      - 5556:5556                # <--- expose the new port
+      - 6666:6666                # <--- expose the new port
       - 2115:2115                # (optional) if you want a separate prom port
     extra_hosts:
       - host.docker.internal:host-gateway
