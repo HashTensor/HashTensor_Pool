@@ -144,17 +144,18 @@ var (
 // anything greater than this is considered a stale
 const workWindow = 8
 
-func (sh *shareHandler) checkStales(ctx *gostratum.StratumContext, si *submitInfo) error {
+func (sh *shareHandler) checkShare(ctx *gostratum.StratumContext, si *submitInfo, state *MiningState) error {
 	tip := sh.tipBlueScore
 	if si.block.Header.BlueScore > tip {
 		sh.tipBlueScore = si.block.Header.BlueScore
-		return nil // can't be
-	}
-	if tip-si.block.Header.BlueScore > workWindow {
+	} else if tip-si.block.Header.BlueScore > workWindow {
 		RecordStaleShare(ctx)
 		return errors.Wrapf(ErrStaleShare, "blueScore %d vs %d", si.block.Header.BlueScore, tip)
 	}
-	// TODO (bs): dupe share tracking
+
+	if !state.AddNonce(si.jobId, si.noncestr) {
+		return ErrDupeShare
+	}
 	return nil
 }
 
@@ -186,6 +187,18 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 
 	submitInfo, err := validateSubmit(ctx, state, event)
 	if err != nil {
+		return err
+	}
+
+	if err := sh.checkShare(ctx, submitInfo, state); err != nil {
+		if errors.Is(err, ErrStaleShare) {
+			return ctx.ReplyStaleShare(event.Id)
+		}
+		if errors.Is(err, ErrDupeShare) {
+			RecordDupeShare(ctx)
+			return ctx.ReplyDupeShare(event.Id)
+		}
+		// unknown error
 		return err
 	}
 
