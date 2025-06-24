@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"math/big"
 
 	"github.com/kaspanet/kaspad/app/appmessage"
 	"github.com/kaspanet/kaspad/domain/consensus/model/externalapi"
@@ -240,6 +241,7 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 	jobId := submitInfo.jobId
 	block := submitInfo.block
 	var invalidShare bool
+	var lastPowValue *big.Int
 	for {
 		converted, err := appmessage.RPCBlockToDomainBlock(block)
 		if err != nil {
@@ -249,6 +251,7 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 		mutableHeader.SetNonce(submitInfo.nonceVal)
 		powState := pow.NewState(mutableHeader)
 		powValue := powState.CalculateProofOfWorkValue()
+		lastPowValue = powValue
 
 		// The block hash must be less or equal than the claimed target.
 		if powValue.Cmp(&powState.Target) <= 0 {
@@ -299,10 +302,21 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 
 	stats.SharesFound.Add(1)
 	stats.VarDiffSharesFound.Add(1)
-	stats.SharesDiff.Add(state.stratumDiff.hashValue)
+
+	// Calculate actual share difficulty from PoW value
+	actualDiff := CalculateHashDifficulty(lastPowValue)
+	stats.SharesDiff.Add(actualDiff)
 	stats.LastShare = time.Now()
 	sh.overall.SharesFound.Add(1)
-	RecordShareFound(ctx, state.stratumDiff.hashValue)
+	RecordShareFound(ctx, actualDiff)
+
+	// Log and flag suspicious shares
+	if state.stratumDiff.hashValue > 0 {
+		ratio := actualDiff / state.stratumDiff.hashValue
+		if ratio > 2.0 || ratio < 0.5 {
+			ctx.Logger.Warn("Actual share difficulty significantly different from assigned difficulty", zap.Float64("actual", actualDiff), zap.Float64("expected", state.stratumDiff.hashValue))
+		}
+	}
 
 	return ctx.Reply(gostratum.JsonRpcResponse{
 		Id:     event.Id,
@@ -581,4 +595,14 @@ func (sh *shareHandler) setClientVardiff(ctx *gostratum.StratumContext, minDiff 
 	previousMinDiff := updateVarDiff(stats, minDiff, false)
 	startVarDiff(stats)
 	return previousMinDiff
+}
+
+// Add CalculateHashDifficulty helper here to avoid import cycle
+func CalculateHashDifficulty(hash *big.Int) float64 {
+	if hash.Sign() == 0 {
+		return 0
+	}
+	target := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
+	f, _ := new(big.Float).Quo(new(big.Float).SetInt(target), new(big.Float).SetInt(hash)).Float64()
+	return f
 }
