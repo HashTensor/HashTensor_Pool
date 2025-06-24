@@ -30,6 +30,7 @@ type clientListener struct {
 	extranonceSize   int8
 	maxExtranonce    int32
 	nextExtranonce   int32
+	lastWorkerDiff   map[string]float64 // NEW: stores last vardiff per worker
 }
 
 func newClientListener(logger *zap.SugaredLogger, shareHandler *shareHandler, minShareDiff float64, extranonceSize int8) *clientListener {
@@ -43,6 +44,7 @@ func newClientListener(logger *zap.SugaredLogger, shareHandler *shareHandler, mi
 		shareHandler:   shareHandler,
 		clients:        make(map[int32]*gostratum.StratumContext),
 		activeWorkers:  make(map[string]int32),
+		lastWorkerDiff: make(map[string]float64), // NEW
 	}
 }
 
@@ -102,6 +104,22 @@ func (c *clientListener) OnConnect(ctx *gostratum.StratumContext) {
 		c.shareHandler.getCreateStats(ctx) // create the stats if they don't exist
 		RecordMinerConnect(ctx)
 	}()
+
+	// Restore last vardiff if available
+	if ctx.WalletAddr != "" && ctx.WorkerName != "" {
+		workerKey := fmt.Sprintf("%s.%s", ctx.WalletAddr, ctx.WorkerName)
+		c.clientLock.Lock()
+		if lastDiff, ok := c.lastWorkerDiff[workerKey]; ok && lastDiff > 0 {
+			state := GetMiningState(ctx)
+			if state.stratumDiff == nil {
+				state.stratumDiff = newKaspaDiff()
+			}
+			state.stratumDiff.setDiffValue(lastDiff)
+			c.shareHandler.setClientVardiff(ctx, lastDiff)
+			c.logger.Info("Restored last vardiff for worker", zap.String("worker", workerKey), zap.Float64("diff", lastDiff))
+		}
+		c.clientLock.Unlock()
+	}
 }
 
 func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
@@ -114,6 +132,9 @@ func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 		if id, ok := c.activeWorkers[workerKey]; ok && id == ctx.Id {
 			delete(c.activeWorkers, workerKey)
 		}
+		// Save last vardiff for this worker
+		stats := c.shareHandler.getCreateStats(ctx)
+		c.lastWorkerDiff[workerKey] = stats.MinDiff.Load()
 	}
 	c.logger.Debug("removed client", zap.Int32("client_id", ctx.Id))
 	c.clientLock.Unlock()
