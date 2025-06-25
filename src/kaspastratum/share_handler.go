@@ -381,8 +381,8 @@ func (sh *shareHandler) startPrintStatsThread() error {
 		sh.statsLock.Lock()
 
 		str := "\n===============================================================================\n"
-		str += "      worker name      |  avg hashrate  |  acc/stl/inv  | blocks |    uptime   \n"
-		str += "-------------------------------------------------------------------------------\n"
+		str += "      worker name      |    diff    |  avg hashrate  |  acc/stl/inv  | blocks |    uptime   \n"
+		str += "------------------------------------------------------------------------------------------\n"
 		var lines []string
 		totalRate := float64(0)
 		for _, v := range sh.stats {
@@ -391,15 +391,16 @@ func (sh *shareHandler) startPrintStatsThread() error {
 			totalRate += rate
 			rateStr := stringifyHashrate(rate)
 			ratioStr := fmt.Sprintf("%d/%d/%d", v.SharesFound.Load(), v.StaleShares.Load(), v.InvalidShares.Load())
-			lines = append(lines, fmt.Sprintf(" %-22s| %14.14s | %13.13s | %6d | %11s",
-				v.WorkerName, rateStr, ratioStr, v.BlocksFound.Load(), time.Since(v.StartTime).Round(time.Second)))
+			diffStr := fmt.Sprintf("%8.2f", v.MinDiff.Load())
+			lines = append(lines, fmt.Sprintf(" %-22s| %8s | %14.14s | %13.13s | %6d | %11s",
+				v.WorkerName, diffStr, rateStr, ratioStr, v.BlocksFound.Load(), time.Since(v.StartTime).Round(time.Second)))
 		}
 		sort.Strings(lines)
 		str += strings.Join(lines, "\n")
 		rateStr := stringifyHashrate(totalRate)
 		ratioStr := fmt.Sprintf("%d/%d/%d", sh.overall.SharesFound.Load(), sh.overall.StaleShares.Load(), sh.overall.InvalidShares.Load())
-		str += "\n-------------------------------------------------------------------------------\n"
-		str += fmt.Sprintf("                       | %14.14s | %13.13s | %6d | %11s",
+		str += "\n------------------------------------------------------------------------------------------\n"
+		str += fmt.Sprintf("                       |          | %14.14s | %13.13s | %6d | %11s",
 			rateStr, ratioStr, sh.overall.BlocksFound.Load(), time.Since(start).Round(time.Second))
 		str += "\n========================================================== ks_bridge_" + version + " ===\n"
 		sh.statsLock.Unlock()
