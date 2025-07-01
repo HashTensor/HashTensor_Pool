@@ -155,7 +155,12 @@ func (c *clientListener) NewBlockAvailable(kapi *KaspaApi) {
 				return
 			}
 
-			state := GetMiningState(client)
+			state, ok := client.State.(*MiningState)
+			if !ok || state == nil {
+				client.Logger.Warn("client state is nil or not MiningState, skipping", zap.String("client", client.String()))
+				return
+			}
+
 			if client.WalletAddr == "" {
 				if time.Since(state.connectTime) > time.Second*20 { // timeout passed
 					// this happens pretty frequently in gcp/aws land since script-kiddies scrape ports
