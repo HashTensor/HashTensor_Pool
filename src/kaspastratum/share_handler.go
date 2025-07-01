@@ -370,6 +370,19 @@ func (sh *shareHandler) startPruneStatsThread() error {
 	}
 }
 
+// Helper to truncate long worker names for stats output
+func truncateWorkerName(name string, maxLen int) string {
+	if len(name) <= maxLen {
+		return name
+	}
+	if maxLen <= 6 {
+		return name[:maxLen]
+	}
+	// Show first 6 and last 6 characters, separated by ...
+	keep := 6
+	return name[:keep] + "..." + name[len(name)-keep:]
+}
+
 func (sh *shareHandler) startPrintStatsThread() error {
 	start := time.Now()
 	for {
@@ -385,6 +398,7 @@ func (sh *shareHandler) startPrintStatsThread() error {
 		str += "------------------------------------------------------------------------------------------\n"
 		var lines []string
 		totalRate := float64(0)
+		maxWorkerLen := 20
 		for _, v := range sh.stats {
 			// print stats
 			rate := GetAverageHashrateGHs(v)
@@ -392,8 +406,9 @@ func (sh *shareHandler) startPrintStatsThread() error {
 			rateStr := stringifyHashrate(rate)
 			ratioStr := fmt.Sprintf("%d/%d/%d", v.SharesFound.Load(), v.StaleShares.Load(), v.InvalidShares.Load())
 			diffStr := fmt.Sprintf("%8.2f", v.MinDiff.Load())
+			worker := truncateWorkerName(v.WorkerName, maxWorkerLen)
 			lines = append(lines, fmt.Sprintf(" %-22s| %8s | %14.14s | %13.13s | %6d | %11s",
-				v.WorkerName, diffStr, rateStr, ratioStr, v.BlocksFound.Load(), time.Since(v.StartTime).Round(time.Second)))
+				worker, diffStr, rateStr, ratioStr, v.BlocksFound.Load(), time.Since(v.StartTime).Round(time.Second)))
 		}
 		sort.Strings(lines)
 		str += strings.Join(lines, "\n")
@@ -463,7 +478,7 @@ func (sh *shareHandler) startVardiffThread(expectedShareRate uint, logStats bool
 		var toleranceErrs []string
 
 		for _, v := range sh.stats {
-			worker := v.WorkerName
+			worker := truncateWorkerName(v.WorkerName, 14)
 			if v.VarDiffStartTime.IsZero() {
 				// no vardiff sent to client
 				toleranceErrs = append(toleranceErrs, fmt.Sprintf("no diff sent to client %s", worker))
