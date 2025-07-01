@@ -201,6 +201,9 @@ func (c *clientListener) NewBlockAvailable(kapi *KaspaApi) {
 				c.shareHandler.setClientVardiff(client, c.minShareDiff)
 			} else {
 				varDiff := c.shareHandler.getClientVardiff(client)
+				if state.stratumDiff == nil {
+					state.stratumDiff = newKaspaDiff()
+				}
 				if varDiff != state.stratumDiff.diffValue && varDiff != 0 {
 					// send updated vardiff
 					client.Logger.Info(fmt.Sprintf("changing diff from %f to %f", state.stratumDiff.diffValue, varDiff))
@@ -258,6 +261,9 @@ func (c *clientListener) NewBlockAvailable(kapi *KaspaApi) {
 }
 
 func sendClientDiff(client *gostratum.StratumContext, state *MiningState) {
+	if state.stratumDiff == nil {
+		state.stratumDiff = newKaspaDiff()
+	}
 	if err := client.Send(gostratum.JsonRpcEvent{
 		Version: "2.0",
 		Method:  "mining.set_difficulty",
