@@ -16,9 +16,9 @@ services:
       - '-pow2clamp=true'
       - '-extranonce=2'
       - '-prom=:2114'
-      - '-stratum=:4444' 
+      - '-stratum=:5555' 
     ports:
-      - 4444:4444  # In fact, port 5555 (reverse proxy) is used here, it is proxied through nginx.
+      - 5555:5555
       - 2114:2114
     extra_hosts:
       - host.docker.internal:host-gateway
