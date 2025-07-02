@@ -73,9 +73,21 @@ func (c *clientListener) RegisterWorker(wallet, worker string, clientId int32) b
 
 	// Check if this IP is already associated with a different worker
 	if existingWorker, exists := c.ipToWorker[ip]; exists && existingWorker != workerKey {
-		c.logger.Warn("IP already associated with another worker, disconnecting new client", zap.String("ip", ip), zap.String("existing_worker", existingWorker), zap.String("new_worker", workerKey))
-		go ctx.Disconnect()
-		return false
+		// Check if the previous worker is still connected
+		if oldClientId, ok := c.activeWorkers[existingWorker]; ok {
+			if oldClient, ok := c.clients[oldClientId]; ok && oldClient.Connected() {
+				c.logger.Warn("IP already associated with another ACTIVE worker, disconnecting new client", zap.String("ip", ip), zap.String("existing_worker", existingWorker), zap.String("new_worker", workerKey))
+				go ctx.Disconnect()
+				return false
+			} else {
+				// Previous worker is not connected, clean up stale mapping
+				delete(c.activeWorkers, existingWorker)
+				delete(c.ipToWorker, ip)
+			}
+		} else {
+			// No active client for this worker, clean up stale mapping
+			delete(c.ipToWorker, ip)
+		}
 	}
 
 	// Remove old worker for this workerKey if exists
