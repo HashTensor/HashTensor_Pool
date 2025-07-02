@@ -86,8 +86,17 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 
 	// Try to register the worker, this will disconnect an existing active worker.
 	disableDupCheck := os.Getenv("DISABLE_DUPLICATE_WORKER_CHECK")
+	registered := true
 	if disableDupCheck != "1" && disableDupCheck != "true" {
-		clientListener.RegisterWorker(address, workerName, ctx.Id)
+		registered = clientListener.RegisterWorker(address, workerName, ctx.Id)
+	}
+
+	if !registered {
+		errMsg := fmt.Sprintf("IP %s is already associated with another worker. Only one worker per IP is allowed.", ctx.RemoteAddr)
+		ctx.Logger.Warn(errMsg)
+		ctx.Reply(NewResponse(event, nil, []any{-1, errMsg, nil}))
+		go ctx.Disconnect()
+		return fmt.Errorf(errMsg)
 	}
 
 	ctx.WalletAddr = address

@@ -31,6 +31,7 @@ type clientListener struct {
 	maxExtranonce    int32
 	nextExtranonce   int32
 	lastWorkerDiff   map[string]float64 // NEW: stores last vardiff per worker
+	ipToWorker       map[string]string  // NEW: maps IP to workerKey
 }
 
 func newClientListener(logger *zap.SugaredLogger, shareHandler *shareHandler, minShareDiff float64, extranonceSize int8) *clientListener {
@@ -45,6 +46,7 @@ func newClientListener(logger *zap.SugaredLogger, shareHandler *shareHandler, mi
 		clients:        make(map[int32]*gostratum.StratumContext),
 		activeWorkers:  make(map[string]int32),
 		lastWorkerDiff: make(map[string]float64), // NEW
+		ipToWorker:     make(map[string]string),  // NEW
 	}
 }
 
@@ -61,7 +63,22 @@ func (c *clientListener) RegisterWorker(wallet, worker string, clientId int32) b
 	c.clientLock.Lock()
 	defer c.clientLock.Unlock()
 
+	ctx, ok := c.clients[clientId]
+	if !ok {
+		c.logger.Warn("RegisterWorker: client context not found", zap.Int32("client_id", clientId))
+		return false
+	}
+	ip := ctx.RemoteAddr
 	workerKey := fmt.Sprintf("%s.%s", wallet, worker)
+
+	// Check if this IP is already associated with a different worker
+	if existingWorker, exists := c.ipToWorker[ip]; exists && existingWorker != workerKey {
+		c.logger.Warn("IP already associated with another worker, disconnecting new client", zap.String("ip", ip), zap.String("existing_worker", existingWorker), zap.String("new_worker", workerKey))
+		go ctx.Disconnect()
+		return false
+	}
+
+	// Remove old worker for this workerKey if exists
 	if oldClientId, exists := c.activeWorkers[workerKey]; exists {
 		if oldClient, clientExists := c.clients[oldClientId]; clientExists {
 			c.logger.Debug("disconnecting old client for worker", zap.String("worker", workerKey), zap.Int32("old_client_id", oldClientId), zap.Int32("new_client_id", clientId))
@@ -69,6 +86,7 @@ func (c *clientListener) RegisterWorker(wallet, worker string, clientId int32) b
 		}
 	}
 	c.activeWorkers[workerKey] = clientId
+	c.ipToWorker[ip] = workerKey
 	return true
 }
 
@@ -131,6 +149,10 @@ func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 		workerKey := fmt.Sprintf("%s.%s", ctx.WalletAddr, ctx.WorkerName)
 		if id, ok := c.activeWorkers[workerKey]; ok && id == ctx.Id {
 			delete(c.activeWorkers, workerKey)
+		}
+		// Remove from ipToWorker map if matches
+		if existingWorker, ok := c.ipToWorker[ctx.RemoteAddr]; ok && existingWorker == workerKey {
+			delete(c.ipToWorker, ctx.RemoteAddr)
 		}
 		// Save last vardiff for this worker
 		stats := c.shareHandler.getCreateStats(ctx)
