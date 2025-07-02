@@ -106,7 +106,6 @@ func HandleAuthorize(ctx *StratumContext, event JsonRpcEvent) error {
 			sh.getCreateStats(ctx)
 		}
 		if rec, ok := ctx.Value("clientListener").(minerConnectRecorder); ok {
-			ctx.Logger.Info("recording miner connect")
 			rec.RecordMinerConnect(ctx)
 		}
 	}
