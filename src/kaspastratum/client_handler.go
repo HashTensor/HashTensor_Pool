@@ -268,3 +268,7 @@ func sendClientDiff(client *gostratum.StratumContext, state *MiningState) {
 	}
 	client.Logger.Info(fmt.Sprintf("Setting client diff: %f", state.stratumDiff.diffValue))
 }
+
+func (c *clientListener) RecordMinerConnect(ctx *gostratum.StratumContext) {
+	RecordMinerConnect(ctx)
+}
