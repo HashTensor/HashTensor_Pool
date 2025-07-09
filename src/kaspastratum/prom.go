@@ -88,6 +88,11 @@ var minerUptimeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Help: "Gauge representing when miners connected (unix timestamp)",
 }, workerLabels)
 
+var minerWorkSeconds = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "ks_miner_work_seconds_total",
+	Help: "Total seconds the miner has been working (accumulated uptime)",
+}, workerLabels)
+
 func commonLabels(worker *gostratum.StratumContext) prometheus.Labels {
 	return prometheus.Labels{
 		"worker": worker.WorkerName,
@@ -205,6 +210,10 @@ func RecordHashrateViolation(worker *gostratum.StratumContext, violationType str
 	labels := commonLabels(worker)
 	labels["violation_type"] = violationType
 	hashrateViolationCounter.With(labels).Inc()
+}
+
+func IncrementMinerWorkSeconds(worker *gostratum.StratumContext, seconds float64) {
+	minerWorkSeconds.With(commonLabels(worker)).Add(seconds)
 }
 
 var promInit sync.Once

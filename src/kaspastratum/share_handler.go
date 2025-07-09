@@ -44,6 +44,9 @@ type WorkStats struct {
 	VarDiffSharesFound atomic.Int64
 	VarDiffWindow      int
 	MinDiff            atomic.Float64
+	RemoteApp          string
+	WalletAddr         string
+	RemoteAddr         string
 }
 
 type shareHandler struct {
@@ -85,6 +88,9 @@ func (sh *shareHandler) getCreateStats(ctx *gostratum.StratumContext) *WorkStats
 		stats.LastShare = time.Now()
 		stats.WorkerName = workerId
 		stats.StartTime = time.Now()
+		stats.RemoteApp = ctx.RemoteApp
+		stats.WalletAddr = ctx.WalletAddr
+		stats.RemoteAddr = ctx.RemoteAddr
 		sh.stats[workerId] = stats
 
 		// TODO: not sure this is the best place, nor whether we shouldn't be
@@ -597,4 +603,28 @@ func (sh *shareHandler) setClientVardiff(ctx *gostratum.StratumContext, minDiff 
 	previousMinDiff := updateVarDiff(stats, minDiff, false)
 	startVarDiff(stats)
 	return previousMinDiff
+}
+
+// Periodically increments Prometheus miner work seconds for active workers
+func (sh *shareHandler) startMinerUptimeThread() {
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			<-ticker.C
+			sh.statsLock.Lock()
+			for _, v := range sh.stats {
+				if v.SharesFound.Load() > 0 && time.Since(v.LastShare) <= 60*time.Second {
+					ctx := &gostratum.StratumContext{
+						WorkerName: v.WorkerName,
+						RemoteApp:   v.RemoteApp,   // Add these fields to WorkStats if not present
+						WalletAddr:  v.WalletAddr,  // Add these fields to WorkStats if not present
+						RemoteAddr:  v.RemoteAddr,  // Add these fields to WorkStats if not present
+					}
+					IncrementMinerWorkSeconds(ctx, 10)
+				}
+			}
+			sh.statsLock.Unlock()
+		}
+	}()
 }

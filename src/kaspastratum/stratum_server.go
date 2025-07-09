@@ -135,6 +135,7 @@ func ListenAndServe(cfg BridgeConfig) error {
 	}
 
 	go shareHandler.startPruneStatsThread()
+	go shareHandler.startMinerUptimeThread()
 
 	return gostratum.NewListener(stratumConfig).Listen(context.Background())
 }
