@@ -31,6 +31,8 @@ type clientListener struct {
 	maxExtranonce    int32
 	nextExtranonce   int32
 	lastWorkerDiff   map[string]float64 // NEW: stores last vardiff per worker
+
+	workerCooldown   map[string]time.Time // workerKey -> last disconnect time
 }
 
 func newClientListener(logger *zap.SugaredLogger, shareHandler *shareHandler, minShareDiff float64, extranonceSize int8) *clientListener {
@@ -45,6 +47,7 @@ func newClientListener(logger *zap.SugaredLogger, shareHandler *shareHandler, mi
 		clients:        make(map[int32]*gostratum.StratumContext),
 		activeWorkers:  make(map[string]int32),
 		lastWorkerDiff: make(map[string]float64), // NEW
+		workerCooldown: make(map[string]time.Time),
 	}
 }
 
@@ -58,18 +61,47 @@ func (c *clientListener) IsWorkerActive(wallet, worker string) bool {
 }
 
 func (c *clientListener) RegisterWorker(wallet, worker string, clientId int32) bool {
-	c.clientLock.Lock()
-	defer c.clientLock.Unlock()
-
 	workerKey := fmt.Sprintf("%s.%s", wallet, worker)
-	if oldClientId, exists := c.activeWorkers[workerKey]; exists {
-		if oldClient, clientExists := c.clients[oldClientId]; clientExists {
-			c.logger.Debug("disconnecting old client for worker", zap.String("worker", workerKey), zap.Int32("old_client_id", oldClientId), zap.Int32("new_client_id", clientId))
-			go oldClient.Disconnect()
+	cooldown := 5 * time.Second
+
+	for {
+		c.clientLock.Lock()
+		// Check cooldown
+		if lastDisc, ok := c.workerCooldown[workerKey]; ok {
+			if time.Since(lastDisc) < cooldown {
+				c.logger.Warn("Worker reconnect cooldown active", zap.String("worker", workerKey), zap.Duration("remaining", cooldown-time.Since(lastDisc)))
+				c.clientLock.Unlock()
+				time.Sleep(cooldown - time.Since(lastDisc))
+				continue
+			}
 		}
+		if oldClientId, exists := c.activeWorkers[workerKey]; exists {
+			if oldClient, clientExists := c.clients[oldClientId]; clientExists {
+				c.logger.Debug("disconnecting old client for worker", zap.String("worker", workerKey), zap.Int32("old_client_id", oldClientId), zap.Int32("new_client_id", clientId))
+				go oldClient.Disconnect()
+			}
+			c.clientLock.Unlock()
+			// Wait for old client to be removed from activeWorkers
+			for {
+				c.clientLock.Lock()
+				_, stillExists := c.activeWorkers[workerKey]
+				c.clientLock.Unlock()
+				if !stillExists {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			// After disconnect, set cooldown
+			c.clientLock.Lock()
+			c.workerCooldown[workerKey] = time.Now()
+			c.clientLock.Unlock()
+			continue
+		}
+		// No old client, safe to register
+		c.activeWorkers[workerKey] = clientId
+		c.clientLock.Unlock()
+		return true
 	}
-	c.activeWorkers[workerKey] = clientId
-	return true
 }
 
 func (c *clientListener) OnConnect(ctx *gostratum.StratumContext) {
@@ -118,17 +150,17 @@ func (c *clientListener) OnConnect(ctx *gostratum.StratumContext) {
 func (c *clientListener) OnDisconnect(ctx *gostratum.StratumContext) {
 	ctx.Done()
 	c.clientLock.Lock()
-	delete(c.clients, ctx.Id)
-	// Remove from active workers map
 	if ctx.WalletAddr != "" && ctx.WorkerName != "" {
 		workerKey := fmt.Sprintf("%s.%s", ctx.WalletAddr, ctx.WorkerName)
 		if id, ok := c.activeWorkers[workerKey]; ok && id == ctx.Id {
 			delete(c.activeWorkers, workerKey)
+			c.workerCooldown[workerKey] = time.Now() // Set cooldown on disconnect
 		}
 		// Save last vardiff for this worker
 		stats := c.shareHandler.getCreateStats(ctx)
 		c.lastWorkerDiff[workerKey] = stats.MinDiff.Load()
 	}
+	delete(c.clients, ctx.Id)
 	c.logger.Debug("removed client", zap.Int32("client_id", ctx.Id))
 	c.clientLock.Unlock()
 	RecordDisconnect(ctx)
