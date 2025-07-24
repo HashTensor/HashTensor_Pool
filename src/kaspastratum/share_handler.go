@@ -159,13 +159,6 @@ func (sh *shareHandler) checkShare(ctx *gostratum.StratumContext, si *submitInfo
 		return errors.Wrapf(ErrStaleShare, "blueScore %d vs %d", si.block.Header.BlueScore, tip)
 	}
 
-	// Reject if not the latest job for this client
-	if !state.IsLatestJob(si.jobId) {
-		ctx.Logger.Warn("Rejected share: not latest job ID", zap.Uint64("submitted_job_id", si.jobId), zap.Uint64("latest_job_id", state.LatestJobId))
-		RecordStaleShare(ctx)
-		return ErrStaleShare
-	}
-
 	if !state.AddNonce(si.jobId, si.noncestr) {
 		return ErrDupeShare
 	}

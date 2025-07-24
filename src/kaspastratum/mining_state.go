@@ -22,8 +22,6 @@ type MiningState struct {
 	connectTime     time.Time
 	stratumDiff     *kaspaDiff
 	maxJobs         uint8
-
-	LatestJobId     uint64 // Track the latest job ID assigned to this client
 }
 
 func MiningStateGenerator() any {
@@ -51,7 +49,6 @@ func (ms *MiningState) AddJob(job *appmessage.RPCBlock) uint64 {
 		delete(ms.SubmittedNonces, jobKey)
 	}
 	ms.Jobs[jobKey] = job
-	ms.LatestJobId = idx // Update latest job id
 	return idx
 }
 
@@ -81,11 +78,4 @@ func (ms *MiningState) AddNonce(jobId uint64, nonce string) bool {
 
 	ms.SubmittedNonces[jobKey][nonce] = true
 	return true
-}
-
-// Returns true if the jobId is the latest job assigned to this client
-func (ms *MiningState) IsLatestJob(jobId uint64) bool {
-	ms.JobLock.Lock()
-	defer ms.JobLock.Unlock()
-	return jobId == ms.LatestJobId
 }
