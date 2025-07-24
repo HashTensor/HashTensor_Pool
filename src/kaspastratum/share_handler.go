@@ -189,6 +189,7 @@ func (sh *shareHandler) checkHashrateSanity(stats *WorkStats, ctx *gostratum.Str
 
 func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostratum.JsonRpcEvent) error {
 	state := GetMiningState(ctx)
+	maxJobs := uint64(state.maxJobs)
 
 	submitInfo, err := validateSubmit(ctx, state, event)
 	if err != nil {
@@ -208,6 +209,7 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 	}
 
 	stats := sh.getCreateStats(ctx)
+	
 	// Add hashrate sanity check
 	if err := sh.checkHashrateSanity(stats, ctx); err != nil {
 		ctx.Logger.Error("Hashrate sanity check failed", zap.Error(err))
@@ -241,40 +243,77 @@ func (sh *shareHandler) HandleSubmit(ctx *gostratum.StratumContext, event gostra
 		}
 	}
 
-	// --- REWRITE: Remove job history loop, mark as invalid if not valid for this job ---
-	converted, err := appmessage.RPCBlockToDomainBlock(submitInfo.block)
-	if err != nil {
-		return fmt.Errorf("failed to cast block to mutable block: %+v", err)
-	}
-	mutableHeader := converted.Header.ToMutable()
-	mutableHeader.SetNonce(submitInfo.nonceVal)
-	powState := pow.NewState(mutableHeader)
-	powValue := powState.CalculateProofOfWorkValue()
-
-	// The block hash must be less or equal than the claimed target.
-	if powValue.Cmp(&powState.Target) <= 0 {
-		// block?
-		if err := sh.submit(ctx, converted, submitInfo.nonceVal, event.Id); err != nil {
-			return err
+	jobId := submitInfo.jobId
+	block := submitInfo.block
+	var invalidShare bool
+	for {
+		converted, err := appmessage.RPCBlockToDomainBlock(block)
+		if err != nil {
+			return fmt.Errorf("failed to cast block to mutable block: %+v", err)
 		}
-		stats.SharesFound.Add(1)
-		stats.VarDiffSharesFound.Add(1)
-		stats.SharesDiff.Add(state.stratumDiff.hashValue)
-		stats.LastShare = time.Now()
-		sh.overall.SharesFound.Add(1)
-		RecordShareFound(ctx, state.stratumDiff.hashValue)
-		return ctx.Reply(gostratum.JsonRpcResponse{
-			Id:     event.Id,
-			Result: true,
-		})
+		mutableHeader := converted.Header.ToMutable()
+		mutableHeader.SetNonce(submitInfo.nonceVal)
+		powState := pow.NewState(mutableHeader)
+		powValue := powState.CalculateProofOfWorkValue()
+
+		// The block hash must be less or equal than the claimed target.
+		if powValue.Cmp(&powState.Target) <= 0 {
+			// block?
+			if err := sh.submit(ctx, converted, submitInfo.nonceVal, event.Id); err != nil {
+				return err
+			}
+			invalidShare = false
+			break
+		} else if powValue.Cmp(state.stratumDiff.targetValue) >= 0 {
+			// invalid share, but don't record it yet
+			if jobId == submitInfo.jobId {
+				ctx.Logger.Warn(fmt.Sprintf("low diff share... checking for bad job ID (%d)", jobId))
+				invalidShare = true
+			}
+
+			// stupid hack for busted ass IceRiver/Bitmain ASICs.  Need to loop
+			// through job history because they submit jobs with incorrect IDs
+			if jobId == 1 || jobId%maxJobs == submitInfo.jobId%maxJobs+1 {
+				// exhausted all previous blocks
+				break
+			} else {
+				var exists bool
+				jobId--
+				block, exists = state.GetJob(jobId)
+				if !exists {
+					// just exit loop - bad share will be recorded
+					break
+				}
+			}
+		} else {
+			// valid share
+			if invalidShare {
+				ctx.Logger.Warn(fmt.Sprintf("found correct job ID: %d", jobId))
+				invalidShare = false
+			}
+			break
+		}
 	}
 
-	// If share is not valid for this job, immediately mark as invalid (no job history check)
-	ctx.Logger.Warn("low diff share... invalid job ID or low diff", zap.Uint64("job_id", submitInfo.jobId))
-	stats.InvalidShares.Add(1)
-	sh.overall.InvalidShares.Add(1)
-	RecordWeakShare(ctx)
-	return ctx.ReplyLowDiffShare(event.Id)
+	if invalidShare {
+		ctx.Logger.Warn("low diff share confirmed")
+		stats.InvalidShares.Add(1)
+		sh.overall.InvalidShares.Add(1)
+		RecordWeakShare(ctx)
+		return ctx.ReplyLowDiffShare(event.Id)
+	}
+
+	stats.SharesFound.Add(1)
+	stats.VarDiffSharesFound.Add(1)
+	stats.SharesDiff.Add(state.stratumDiff.hashValue)
+	stats.LastShare = time.Now()
+	sh.overall.SharesFound.Add(1)
+	RecordShareFound(ctx, state.stratumDiff.hashValue)
+
+	return ctx.Reply(gostratum.JsonRpcResponse{
+		Id:     event.Id,
+		Result: true,
+	})
 }
 
 func (sh *shareHandler) submit(ctx *gostratum.StratumContext,
